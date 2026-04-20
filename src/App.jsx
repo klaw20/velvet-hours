@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from "react";
 
 export default function VelvetHours() {
@@ -14,6 +15,7 @@ export default function VelvetHours() {
   const [loadingMsg, setLoadingMsg] = useState("Lighting the candles…");
   const typingRef = useRef(null);
   const loadingRef = useRef(null);
+  const timeoutRef = useRef(null);
 
   const LOADING_MSGS = ["Lighting the candles…","Setting the scene…","The story stirs…","He waits in the shadows…","Turning the page…"];
   const ARCHETYPES = [
@@ -47,6 +49,11 @@ export default function VelvetHours() {
     return () => clearInterval(loadingRef.current);
   }, [screen]);
 
+  function stopLoading() {
+    clearInterval(loadingRef.current);
+    clearTimeout(timeoutRef.current);
+  }
+
   function buildSystem() {
     const archetype = ARCHETYPES.find((a) => a.id === profile.archetype);
     const setting = SETTINGS.find((s) => s.id === profile.setting);
@@ -56,9 +63,9 @@ PROTAGONIST: "${profile.heroine || profile.name}"
 LOVE INTEREST: ${archetype?.label} — ${archetype?.desc}
 SETTING: ${setting?.label}
 
-CHOICES must have real consequences. Always 4 choices with types: bold, soft, wild, dark.
+Always provide exactly 4 choices with types: bold, soft, wild, dark.
 
-Respond ONLY with valid JSON:
+Respond ONLY with valid JSON, no markdown:
 {
   "chapterTitle": "title",
   "subtitle": "tagline",
@@ -75,6 +82,13 @@ Respond ONLY with valid JSON:
   async function generateChapter(choiceMade = null) {
     setScreen("loading");
     setError("");
+
+    timeoutRef.current = setTimeout(() => {
+      stopLoading();
+      setError("Timed out after 30 seconds. Please check your Anthropic API key in Vercel settings and try again.");
+      setScreen(chapter ? "story" : "onboarding");
+    }, 30000);
+
     try {
       const userMsg = storyHistory.length === 0
         ? "Begin Chapter 1. Set the scene, introduce the love interest with mystery and tension."
@@ -90,7 +104,9 @@ Respond ONLY with valid JSON:
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "API error");
+      stopLoading();
+
+      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
 
       const text = data.content.map((b) => b.text || "").join("");
       const clean = text.replace(/```json|```/g, "").trim();
@@ -102,6 +118,7 @@ Respond ONLY with valid JSON:
       setScreen("story");
       typeStory(parsed.story);
     } catch (e) {
+      stopLoading();
       setError(`Error: ${e.message}`);
       setScreen(chapter ? "story" : "onboarding");
     }
@@ -133,6 +150,7 @@ Respond ONLY with valid JSON:
 
   function handleRestart() {
     clearTimeout(typingRef.current);
+    stopLoading();
     setScreen("onboarding");
     setChapter(null);
     setChapterNum(1);
