@@ -1,6 +1,6 @@
 {
   "name": "velvet-hours",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "Velvet Hours — A daily intimate serialized story app",
   "type": "module",
   "scripts": {
