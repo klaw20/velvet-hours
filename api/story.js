@@ -17,7 +17,8 @@ export default async function handler(req) {
     });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = "sk-ant-api03-YOURFULLKEYHERE";
+
   if (!apiKey) {
     return new Response(JSON.stringify({ error: "Missing API key" }), {
       status: 500, headers: { "Content-Type": "application/json", ...corsHeaders }
