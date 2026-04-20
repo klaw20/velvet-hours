@@ -1,38 +1,42 @@
-export const config = {
-  runtime: "edge",
-};
-
-const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || "*";
-
 export default async function handler(req) {
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || "*";
+  
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
+
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders() });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   if (req.method !== "POST") {
-    return json({ error: "Method not allowed" }, 405);
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405, headers: { "Content-Type": "application/json", ...corsHeaders }
+    });
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    return new Response(JSON.stringify({ error: "Missing API key" }), {
+      status: 500, headers: { "Content-Type": "application/json", ...corsHeaders }
+    });
   }
 
   let body;
   try {
     body = await req.json();
   } catch {
-    return json({ error: "Invalid JSON body" }, 400);
+    return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+      status: 400, headers: { "Content-Type": "application/json", ...corsHeaders }
+    });
   }
 
   const { messages, system } = body;
 
-  if (!messages || !Array.isArray(messages)) {
-    return json({ error: "messages array is required" }, 400);
-  }
-
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return json({ error: "API key not configured" }, 500);
-  }
-
   try {
-    const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -41,35 +45,27 @@ export default async function handler(req) {
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 1000,
-        system: system ?? "",
-        messages,
+        max_tokens: 1200,
+        system: system || "",
+        messages: messages || [],
       }),
     });
 
-    const data = await anthropicRes.json();
+    const data = await response.json();
 
-    if (!anthropicRes.ok) {
-      return json({ error: data?.error?.message ?? "Anthropic API error" }, 502);
+    if (!response.ok) {
+      return new Response(JSON.stringify({ error: data?.error?.message || "Anthropic error", detail: data }), {
+        status: 502, headers: { "Content-Type": "application/json", ...corsHeaders }
+      });
     }
 
-    return json(data, 200);
+    return new Response(JSON.stringify(data), {
+      status: 200, headers: { "Content-Type": "application/json", ...corsHeaders }
+    });
+
   } catch (err) {
-    return json({ error: "Internal server error" }, 500);
+    return new Response(JSON.stringify({ error: err.message || "Server error" }), {
+      status: 500, headers: { "Content-Type": "application/json", ...corsHeaders }
+    });
   }
-}
-
-function corsHeaders() {
-  return {
-    "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-  };
-}
-
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json", ...corsHeaders() },
-  });
 }
